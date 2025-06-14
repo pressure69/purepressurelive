@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Filtered Stream - PurePressureLive</title>
+  <style>
+    body {
+      background: #0a0a0a;
+      margin: 0;
+      padding: 0;
+      color: white;
+      font-family: Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+    }
+    video, canvas {
+      border-radius: 12px;
+      width: 640px;
+      height: 480px;
+    }
+    #controls {
+      margin-top: 20px;
+    }
+    button {
+      background: #e60073;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <h1>Live Filter Preview</h1>
+  <video id="video" autoplay muted playsinline></video>
+  <canvas id="canvas"></canvas>
+  <div id="controls">
+    <button onclick="toggleFilter()">Toggle Beauty Filter</button>
+  </div>
+
+  <script>
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    let useFilter = true;
+
+    navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+      .then((stream) => {
+        video.srcObject = stream;
+        draw();
+      })
+      .catch((err) => console.error('Camera error:', err));
+
+    function draw() {
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      if (useFilter) {
+        let imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        let data = imageData.data;
+        for (let i = 0; i < data.length; i += 4) {
+          // Simple smoothing effect (reduce contrast slightly)
+          data[i]     = data[i] + 10;   // R
+          data[i + 1] = data[i + 1] + 10; // G
+          data[i + 2] = data[i + 2] + 10; // B
+        }
+        ctx.putImageData(imageData, 0, 0);
+      }
+      requestAnimationFrame(draw);
+    }
+
+    function toggleFilter() {
+      useFilter = !useFilter;
+    }
+  </script>
+</body>
+</html>

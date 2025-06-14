@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Model Streaming Dashboard</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Arial', sans-serif;
+      background-color: #0b0b0b;
+      color: white;
+      padding: 20px;
+    }
+    h1 {
+      text-align: center;
+      margin-bottom: 30px;
+    }
+    .dashboard {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 40px;
+    }
+    .panel {
+      background-color: #1a1a1a;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 0 15px rgba(0,0,0,0.5);
+    }
+    .panel h2 {
+      margin-top: 0;
+    }
+    input, select, button {
+      width: 100%;
+      padding: 10px;
+      margin: 10px 0;
+      border-radius: 6px;
+      border: none;
+    }
+    video {
+      width: 100%;
+      border-radius: 8px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Model Streaming Dashboard</h1>
+  <div class="dashboard">
+    <div class="panel">
+      <h2>Stream Settings</h2>
+      <label>Your RTMP Stream Key:</label>
+      <input type="text" readonly value="rtmp://yourdomain/live/your-model-key" />
+      <label>Room Access:</label>
+      <select>
+        <option value="free">Free Access</option>
+        <option value="token">Token Access</option>
+      </select>
+      <label>Token Price (if locked):</label>
+      <input type="number" min="0" placeholder="Enter token amount" />
+      <button style="background-color:#e60073; color:white;">Go Live</button>
+    </div>
+    <div class="panel">
+      <h2>Live Preview</h2>
+      <video autoplay muted controls>
+        <source src="https://yourdomain/hls/your-model-key.m3u8" type="application/x-mpegURL">
+        Your browser does not support HTML5 video.
+      </video>
+      <p style="text-align:center; margin-top:10px;">Status: <strong>Offline</strong></p>
+    </div>
+  </div>
+</body>
+</html>
