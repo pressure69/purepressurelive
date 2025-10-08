@@ -2,6 +2,13 @@
 session_start();
 require_once __DIR__ . '/config.php';
 
+$databaseOnline = $pdo instanceof PDO;
+$databaseIssueMessage = null;
+
+if (!$databaseOnline) {
+    $databaseIssueMessage = 'We\'re experiencing a database issue right now. Logins are temporarily unavailable while we work on a fix. Please try again soon.';
+}
+
 if (!isset($_SESSION['csrf_token'])) {
     try {
         $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
@@ -33,7 +40,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errors[] = 'Email/username and password are both required.';
     }
 
-    if (!$errors) {
+    if (!$errors && !$databaseOnline) {
+        $errors[] = 'Logins are currently disabled while we resolve a database issue. Please try again later.';
+    }
+
+    if (!$errors && $databaseOnline) {
         try {
             $stmt = $pdo->prepare('SELECT * FROM models WHERE email = :login OR username = :login LIMIT 1');
             $stmt->execute(['login' => $loginValue]);
@@ -187,14 +198,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       transform: translateY(-1px);
       box-shadow: 0 12px 30px rgba(255, 42, 142, 0.35);
     }
+    .notice,
+    .errors {
+      padding: 12px 14px;
+      border-radius: 12px;
+      margin-bottom: 18px;
+      font-size: 0.9rem;
+    }
+    .notice {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: rgba(255,255,255,0.85);
+    }
     .errors {
       background: rgba(255, 64, 64, 0.15);
       border: 1px solid rgba(255, 64, 64, 0.5);
       padding: 12px 14px;
-      border-radius: 12px;
-      margin-bottom: 18px;
       color: #ffd9d9;
-      font-size: 0.9rem;
     }
     .back-link {
       margin-top: 18px;
@@ -213,6 +233,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <div class="card">
     <h1>Welcome back</h1>
     <p class="lead">Sign in to manage your PurePressureLive stream.</p>
+    <?php if ($databaseIssueMessage): ?>
+      <div class="notice">
+        <?= htmlspecialchars($databaseIssueMessage) ?>
+      </div>
+    <?php endif; ?>
     <?php if ($errors): ?>
       <div class="errors">
         <ul>
