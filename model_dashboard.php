@@ -2,6 +2,52 @@
 session_start();
 require_once __DIR__ . '/config.php';
 
+if (!($pdo instanceof PDO)) {
+    http_response_code(503);
+    ?><!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard temporarily unavailable</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #0d0d0d;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 24px;
+      text-align: center;
+    }
+    .card {
+      max-width: 480px;
+      background: #1a1a1a;
+      padding: 32px;
+      border-radius: 16px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    a {
+      color: #ff1493;
+      text-decoration: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>We’ll be right back</h1>
+    <p>We’re currently experiencing a database issue, so the dashboard is temporarily unavailable. Our team has been notified and we’re working on restoring access.</p>
+    <p><a href="/login.php">Return to login</a></p>
+  </div>
+</body>
+</html>
+<?php
+    exit;
+}
+
 // Verify model is logged in
 if (!isset($_SESSION['model_id'])) {
     header('Location: /login.php');

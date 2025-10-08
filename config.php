@@ -20,10 +20,13 @@ $options = [
     PDO::ATTR_EMULATE_PREPARES => false,
 ];
 
+/** @var PDO|null $pdo */
+$pdo = null;
+$pdoError = null;
+
 try {
     $pdo = new PDO($dsn, $dbUser, $dbPass, $options);
-} catch (PDOException $e) {
+} catch (Throwable $e) {
+    $pdoError = $e;
     error_log('Database connection failed: ' . $e->getMessage());
-    http_response_code(500);
-    exit('Database connection failed.');
 }
