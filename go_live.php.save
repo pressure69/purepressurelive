@@ -1,0 +1,88 @@
+  100%{opacity:0;transform:translateY(-20px) scale(.9);}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Go Live <span style="background:var(--accent);padding:4px 10px;border-radius:999px;font-size:12px;">with Filters</span></h1>
+  <div class="card">
+    <div class="row">
+      <div><b>Status:</b> <?=$m['is_live']?'🟢 Live':'⚪ Offline'?></div>
+      <form method="post" class="row">
+        <button name="go_live">Start Live</button>
+        <button name="go_off">Stop Live</button>
+      </form>
+    </div>
+    <div style="margin:10px 0">
+      <label>OBS / Encoder</label>
+      <div>RTMP URL: <code>rtmp://YOUR_INGEST_HOST/live</code></div>
+      <div>Stream Key: <code style="user-select:all"><?=$m['stream_key'] ?: '—'?></code></div>
+      <div style="color:#9aa0a6">Use 6000 kbps, 1080p30, keyframe 2s. Paste Stream Key, click Start Stream.</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="row">
+      <button id="start">Start Camera</button>
+      <label class="row"><input type="checkbox" id="beauty"> Beauty Smooth</label>
+      <label class="row"><input type="checkbox" id="mesh"> Face Mesh</label>
+    </div>
+    <div class="row" style="margin-top:10px;position:relative">
+      <video id="cam" playsinline autoplay muted style="width:60%;border:1px solid #222;border-radius:12px;background:#000"></video>
+      <canvas id="canvas" style="width:38%;border:1px solid #222;border-radius:12px;background:#000;aspect-ratio:16/9"></canvas>
+      <!-- Tip Overlay -->
+      <div class="tip-overlay" id="tipOverlay"></div>
+    </div>
+  </div>
+</div>
+
+<!-- MediaPipe -->
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
+<script>
+const cam=document.getElementById('cam'), cvs=document.getElementById('canvas'), ctx=cvs.getContext('2d');
+const beauty=document.getElementById('beauty'), mesh=document.getElementById('mesh');
+let stream, cu, fm;
+
+document.getElementById('start').onclick = async ()=>{
+  stream = await navigator.mediaDevices.getUserMedia({video:{width:1280,height:720},audio:false});
+  cam.srcObject=stream; cvs.width=1280; cvs.height=720;
+
+  fm = new FaceMesh.FaceMesh({ locateFile:(f)=>'https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/'+f });
+  fm.setOptions({maxNumFaces:1,refineLandmarks:true,minDetectionConfidence:0.6,minTrackingConfidence:0.6});
+  fm.onResults((r)=>{
+    ctx.drawImage(r.image,0,0,cvs.width,cvs.height);
+    if(beauty.checked){
+      const t=document.createElement('canvas'); t.width=cvs.width; t.height=cvs.height;
+      const tx=t.getContext('2d'); tx.filter='blur(4px)'; tx.drawImage(cvs,0,0); tx.filter='none';
+      ctx.globalAlpha=.35; ctx.drawImage(t,0,0); ctx.globalAlpha=1;
+    }
+    if(mesh.checked && r.multiFaceLandmarks?.length){
+      const lm=r.multiFaceLandmarks[0]; ctx.strokeStyle='#d9153b'; ctx.lineWidth=2;
+      for(let i=0;i<lm.length;i+=5){ const p=lm[i]; ctx.beginPath(); ctx.arc(p.x*cvs.width,p.y*cvs.height,1.6,0,Math.PI*2); ctx.stroke(); }
+    }
+  });
+
+  cu = new CameraUtils.Camera(cam,{onFrame: async ()=>{ await fm.send({image:cam}); }, width:1280, height:720});
+  cu.start();
+};
+
+// Tip overlay polling
+const overlay=document.getElementById('tipOverlay');
+function showTip(user,amt,msg){
+  const div=document.createElement('div');
+  div.className='tip-msg';
+  div.textContent=`💸 ${user} tipped ${amt} tokens ${msg?'- '+msg:''}`;
+  overlay.appendChild(div);
+  setTimeout(()=>div.remove(),3000);
+}
+async function pollTips(){
+  try{
+    const r=await fetch('api/tips_live.php').then(x=>x.json());
+    r.forEach(t=>showTip(t.user,t.amount,t.message));
+  }catch(e){}
+}
+setInterval(pollTips,5000);
+</script>
+</body>
+</html>

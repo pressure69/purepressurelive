@@ -1,0 +1,60 @@
+<?php
+// === DEBUG SETTINGS ===
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+ini_set('log_errors', 1);
+ini_set('error_log', __DIR__ . '/debug_model_dashboard.log');
+
+session_start();
+require 'config.php';
+
+// Verify model is logged in
+if (!isset($_SESSION['model_id'])) {
+    header("Location: login.php");
+    exit;
+}
+
+try {
+    // Fetch model info
+    $stmt = $pdo->prepare("SELECT username, preview_image, is_live, stream_key 
+                           FROM models WHERE id = ?");
+    $stmt->execute([$_SESSION['model_id']]);
+    $model = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!$model) {
+        echo "<h1>❌ Model not found in DB</h1>";
+        exit;
+    }
+} catch (Exception $e) {
+    echo "<h1>❌ Database Error</h1>";
+    echo "<pre>" . htmlspecialchars($e->getMessage()) . "</pre>";
+    exit;
+}
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Model Dashboard - PurePressureLive (Debug)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="assets/img/favicon.png">
+  <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+  <h1>✅ Debug Mode: Model Dashboard</h1>
+
+  <h2>Logged in as: <?php echo htmlspecialchars($model['username']); ?></h2>
+  <p><b>Stream Key:</b> <?php echo htmlspecialchars($model['stream_key']); ?></p>
+  <p><b>Live Status:</b> <?php echo $model['is_live'] ? '🔴 LIVE' : '⚪ Offline'; ?></p>
+  <p><b>Preview Image:</b> <?php echo $model['preview_image'] ?: 'None'; ?></p>
+
+  <hr>
+  <p>Below is your original dashboard code running under debug mode. Any errors will now show up here or in <code>debug_model_dashboard.log</code>.</p>
+
+<?php
+// === include original dashboard here ===
+include __DIR__ . '/model_dashboard.php.bak';
+?>
+</body>
+</html>

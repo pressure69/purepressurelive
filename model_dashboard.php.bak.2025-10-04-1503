@@ -1,0 +1,363 @@
+<?php
+// ==========================
+// PurePressureLive - Model Dashboard (Full New)
+// ==========================
+declare(strict_types=1);
+session_start();
+
+// ---- Simple route actions (logout, ajax) ----
+$action = $_GET['action'] ?? $_POST['action'] ?? '';
+
+/** Load .env (PPLIVE_*) */
+function pplive_env(): array {
+    $env = [];
+    $envPath = __DIR__ . '/.env';
+    if (is_readable($envPath)) {
+        $lines = file($envPath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+        foreach ($lines as $line) {
+            if (str_starts_with(trim($line), '#')) continue;
+            if (!str_contains($line, '=')) continue;
+            [$k,$v] = array_map('trim', explode('=', $line, 2));
+            $env[$k] = $v;
+        }
+    }
+    return $env;
+}
+
+$ENV = pplive_env();
+$DSN  = $ENV['PPLIVE_DB_DSN']  ?? 'mysql:host=127.0.0.1;dbname=purepressurelive;charset=utf8mb4';
+$USER = $ENV['PPLIVE_DB_USER'] ?? 'purepressure_user';
+$PASS = $ENV['PPLIVE_DB_PASS'] ?? '';
+
+/** PDO */
+function db(): PDO {
+    static $pdo = null;
+    global $DSN, $USER, $PASS;
+    if ($pdo === null) {
+        $pdo = new PDO($DSN, $USER, $PASS, [
+            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+        ]);
+    }
+    return $pdo;
+}
+
+/** Auth guard */
+function require_model() {
+    if (empty($_SESSION['user_id'])) {
+        header('Location: /login.php'); exit;
+    }
+    // Optional: enforce model role if your schema has it
+    // if (($_SESSION['role'] ?? '') !== 'model') { header('Location:/'); exit; }
+}
+require_model();
+
+// ---- Logout ----
+if ($action === 'logout') {
+    $_SESSION = [];
+    if (ini_get("session.use_cookies")) {
+        $params = session_get_cookie_params();
+        setcookie(session_name(), '', time()-42000, $params["path"], $params["domain"], $params["secure"], $params["httponly"]);
+    }
+    session_destroy();
+    header('Location: /login.php');
+    exit;
+}
+
+/** Helper: current model data */
+function me(): array {
+    $pdo = db();
+    $stmt = $pdo->prepare("SELECT id, username, display_name, avatar_url FROM users WHERE id = ?");
+    $stmt->execute([$_SESSION['user_id']]);
+    $u = $stmt->fetch() ?: ['id'=>$_SESSION['user_id'],'username'=>'Model','display_name'=>null,'avatar_url'=>null];
+    return $u;
+}
+
+// ---- AJAX: Save Room Settings ----
+if ($action === 'save_settings') {
+    header('Content-Type: application/json');
+    try {
+        $roomMode = $_POST['room_mode'] ?? 'Public';
+        $modelId  = (int)$_SESSION['user_id'];
+        $pdo = db();
+        // Ensure a row exists in streams for this model
+        $pdo->prepare("INSERT INTO streams (model_id, status, room_mode, updated_at)
+                       VALUES (?, 'offline', ?, NOW())
+                       ON DUPLICATE KEY UPDATE room_mode = VALUES(room_mode), updated_at = NOW()")
+            ->execute([$modelId, $roomMode]);
+        echo json_encode(['ok'=>true, 'room_mode'=>$roomMode]);
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['ok'=>false, 'error'=>$e->getMessage()]);
+    }
+    exit;
+}
+
+// ---- AJAX: Live stats (tokens + inbox) ----
+if ($action === 'stats') {
+    header('Content-Type: application/json');
+    $pdo = db();
+    $modelId = (int)$_SESSION['user_id'];
+
+    // tokens earned
+    $earned = (float)($pdo->query("SELECT COALESCE(SUM(amount),0) AS s FROM tips WHERE model_id=".$modelId)->fetch()['s'] ?? 0);
+
+    // latest goal
+    $goalRow = $pdo->query("SELECT goal_amount FROM token_goals WHERE model_id={$modelId} ORDER BY id DESC LIMIT 1")->fetch();
+    $goal = (float)($goalRow['goal_amount'] ?? 1000);
+    $progressPct = $goal > 0 ? min(100, round(($earned / $goal) * 100)) : 0;
+
+    // inbox (last 5)
+    $msgs = $pdo->query("SELECT sender_id, LEFT(content, 80) AS body, created_at
+                         FROM messages WHERE recipient_id={$modelId}
+                         ORDER BY id DESC LIMIT 5")->fetchAll();
+
+    echo json_encode([
+        'ok'=>true,
+        'earned'=>$earned,
+        'goal'=>$goal,
+        'progress_pct'=>$progressPct,
+        'messages'=>$msgs,
+    ]);
+    exit;
+}
+
+// ---- Page data ----
+$user = me();
+$username = $user['display_name'] ?: $user['username'] ?: 'Model';
+$avatar = $user['avatar_url'] ?: 'https://ui-avatars.com/api/?name='.urlencode($username).'&background=111111&color=FF3B3B';
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>PurePressureLive — Model Dashboard</title>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' https: data: blob:; img-src 'self' https: data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' https: blob:; media-src 'self' blob: data:; connect-src 'self' https:;">
+<style>
+  :root{
+    --bg:#0b0b0b; --panel:#151515; --text:#fff;
+    --brand:#ff2c2c; --brand-glow:0 0 16px rgba(255,44,44,.55);
+    --muted:#a8a8a8; --border:rgba(255,44,44,.45);
+    --card: #101010;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:radial-gradient(70% 120% at 50% -10%, #1a0000 0%, #000 48%, #000 100%);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,'Helvetica Neue',Arial;}
+  a{color:#fff;text-decoration:none}
+  .wrap{max-width:1080px;margin:0 auto;padding:18px 16px 80px}
+  header{display:flex;align-items:center;justify-content:space-between;padding:12px 8px;margin-bottom:10px;border-bottom:1px solid var(--border)}
+  .brand{font-weight:800;letter-spacing:.06em;text-shadow:0 0 22px rgba(255,0,0,.45);color:#ff4040}
+  .brand .sub{display:block;font-size:12px;color:#ff8d8d;opacity:.85;margin-top:2px}
+  .userbox{display:flex;align-items:center;gap:10px}
+  .userbox img{width:36px;height:36px;border-radius:50%;border:2px solid var(--brand)}
+  .userbox .name{font-weight:700}
+  .logout{padding:8px 12px;background:linear-gradient(180deg,#ff3b3b,#d81818);border:1px solid var(--border);border-radius:10px;box-shadow:var(--brand-glow)}
+  .grid{display:grid;grid-template-columns:1fr;gap:18px;margin-top:12px}
+  @media(min-width:840px){.grid{grid-template-columns:1fr 1fr}}
+  .card{background:linear-gradient(180deg,#131313,#0f0f0f);border:1px solid var(--border);border-radius:18px;padding:18px;box-shadow:0 0 30px rgba(255,30,30,.08)}
+  .card h2{margin:0 0 12px;font-size:18px;letter-spacing:.02em;color:#ff5858;text-shadow:var(--brand-glow)}
+  .row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .btn{padding:12px 16px;border-radius:12px;border:1px solid var(--border);background:#1a1a1a;color:#fff;cursor:pointer}
+  .btn.brand{background:linear-gradient(180deg,#ff2f2f,#c21717);box-shadow:var(--brand-glow)}
+  .btn.mute{background:#222}
+  .status{font-weight:700;margin-bottom:10px}
+  video#liveVideo{width:100%;aspect-ratio:16/9;background:#000;border:1px solid var(--border);border-radius:14px;margin:8px 0}
+  /* Filters */
+  .f-beauty{filter:contrast(1.08) saturate(1.15) brightness(1.05);}
+  .f-smooth{filter:blur(1px) contrast(1.05) saturate(1.05);}
+  .f-bw{filter:grayscale(1) contrast(1.15);}
+  .f-funny{filter:hue-rotate(30deg) saturate(1.4) contrast(1.1);}
+  /* Token bar */
+  .bar{height:10px;background:#2a2a2a;border-radius:999px;overflow:hidden;border:1px solid var(--border)}
+  .bar > i{display:block;height:100%;width:0;background:linear-gradient(90deg,#ff2d2d,#ff6b6b);box-shadow:var(--brand-glow)}
+  .kv{display:flex;justify-content:space-between;margin:6px 0;color:#ddd}
+  .list{margin:0;padding:0;list-style:none}
+  .list li{padding:10px 0;border-bottom:1px dashed rgba(255,255,255,.08);color:#cfcfcf}
+  footer{margin-top:26px;padding-top:12px;border-top:1px solid var(--border);color:#aaa;font-size:13px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px}
+  .toast{position:fixed;bottom:14px;right:14px;background:#121212;border:1px solid var(--border);padding:10px 14px;border-radius:12px;box-shadow:var(--brand-glow);opacity:0;transform:translateY(8px);transition:.25s}
+  .toast.show{opacity:1;transform:none}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div>
+        <div class="brand">PUREPRESSURELIVE <span class="sub">Model Dashboard</span></div>
+      </div>
+      <div class="userbox">
+        <img src="<?= htmlspecialchars($avatar) ?>" alt="avatar">
+        <div>
+          <div class="name">Welcome back, <?= htmlspecialchars($username) ?> 👑</div>
+          <div style="font-size:12px;color:#aaa;">ID #<?= (int)$user['id'] ?></div>
+        </div>
+        <a class="logout" href="?action=logout" title="Logout">Logout</a>
+      </div>
+    </header>
+
+    <div class="grid">
+      <!-- Live Stream -->
+      <section class="card" style="grid-column:1/-1">
+        <h2>🎥 Live Stream</h2>
+        <div class="status" id="streamStatus">Status: Offline</div>
+        <video id="liveVideo" autoplay playsinline muted></video>
+        <div class="row">
+          <button class="btn brand" id="goLiveBtn">Go Live</button>
+          <button class="btn mute" id="endLiveBtn">End Stream</button>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <span>Filters:</span>
+          <button class="btn" data-filter="beauty">Beauty</button>
+          <button class="btn" data-filter="smooth">Smooth</button>
+          <button class="btn" data-filter="bw">B/W</button>
+          <button class="btn" data-filter="funny">Funny</button>
+          <button class="btn" id="clearFilters">Clear</button>
+        </div>
+      </section>
+
+      <!-- Room Settings -->
+      <section class="card">
+        <h2>⚙️ Room Settings</h2>
+        <label for="roomMode">Room Mode:</label>
+        <select id="roomMode" class="btn" style="min-width:140px">
+          <option>Public</option>
+          <option>Followers-Only</option>
+          <option>Locked</option>
+        </select>
+        <div style="margin-top:10px">
+          <button class="btn brand" id="saveSettings">Save Settings</button>
+        </div>
+      </section>
+
+      <!-- Tokens & Goals -->
+      <section class="card">
+        <h2>💎 Tips & Goals</h2>
+        <div class="kv"><span>Goal:</span> <strong id="goalVal">1000 Tokens</strong></div>
+        <div class="kv"><span>Earned:</span> <strong id="earnedVal">0</strong></div>
+        <div class="bar"><i id="goalBar"></i></div>
+        <div class="kv"><span>Progress:</span> <strong id="progressVal">0%</strong></div>
+      </section>
+
+      <!-- Inbox -->
+      <section class="card" style="grid-column:1/-1">
+        <h2>📥 Inbox</h2>
+        <ul id="inboxList" class="list">
+          <li>No new messages.</li>
+        </ul>
+      </section>
+    </div>
+
+    <footer>
+      <div>© <?= date('Y') ?> PurePressureLive</div>
+      <div><a href="/terms.php">Terms</a> · <a href="/privacy.php">Privacy</a> · <a href="/support.php">Support</a></div>
+    </footer>
+  </div>
+
+  <div id="toast" class="toast">Saved.</div>
+
+<script>
+(() => {
+  const $ = sel => document.querySelector(sel);
+  const statusEl = $('#streamStatus');
+  const videoEl  = $('#liveVideo');
+  const goBtn    = $('#goLiveBtn');
+  const endBtn   = $('#endLiveBtn');
+  const toast    = $('#toast');
+
+  let stream = null;
+
+  function showToast(msg='Saved.') {
+    toast.textContent = msg;
+    toast.classList.add('show');
+    setTimeout(()=>toast.classList.remove('show'), 1400);
+  }
+
+  // Start camera
+  goBtn.addEventListener('click', async () => {
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      videoEl.srcObject = stream;
+      statusEl.textContent = 'Status: Live ✅';
+      // TODO: hook to backend WebRTC/HLS after preview works
+    } catch (e) {
+      alert('Camera error: ' + e.message);
+      console.error(e);
+    }
+  });
+
+  // Stop camera
+  endBtn.addEventListener('click', () => {
+    if (stream) {
+      stream.getTracks().forEach(t => t.stop());
+      videoEl.srcObject = null;
+    }
+    statusEl.textContent = 'Status: Offline ❌';
+  });
+
+  // Filters
+  const filterMap = {
+    beauty: 'f-beauty',
+    smooth: 'f-smooth',
+    bw:     'f-bw',
+    funny:  'f-funny'
+  };
+  document.querySelectorAll('[data-filter]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const cls = filterMap[btn.dataset.filter];
+      // toggle that one; keep others off (cleaner look)
+      videoEl.classList.remove(...Object.values(filterMap));
+      videoEl.classList.add(cls);
+    });
+  });
+  $('#clearFilters').addEventListener('click', () => {
+    videoEl.classList.remove(...Object.values(filterMap));
+  });
+
+  // Save Room Settings
+  $('#saveSettings').addEventListener('click', async () => {
+    try {
+      const room_mode = $('#roomMode').value;
+      const fd = new FormData();
+      fd.append('action', 'save_settings');
+      fd.append('room_mode', room_mode);
+      const res = await fetch(location.pathname, { method:'POST', body: fd, credentials:'same-origin' });
+      const j = await res.json();
+      if (!j.ok) throw new Error(j.error || 'Failed to save');
+      showToast('Room saved: ' + j.room_mode);
+    } catch (e) {
+      alert('Save failed: ' + e.message);
+    }
+  });
+
+  // Live Stats (goal, earned, inbox)
+  async function refreshStats() {
+    try {
+      const res = await fetch('?action=stats', { credentials:'same-origin' });
+      const j = await res.json();
+      if (!j.ok) return;
+      $('#goalVal').textContent = (j.goal ?? 1000) + ' Tokens';
+      $('#earnedVal').textContent = Math.round(j.earned ?? 0);
+      $('#progressVal').textContent = (j.progress_pct ?? 0) + '%';
+      $('#goalBar').style.width = (j.progress_pct ?? 0) + '%';
+
+      const ul = $('#inboxList');
+      ul.innerHTML = '';
+      const msgs = j.messages || [];
+      if (!msgs.length) {
+        ul.innerHTML = '<li>No new messages.</li>';
+      } else {
+        msgs.forEach(m => {
+          const li = document.createElement('li');
+          li.textContent = `[${m.created_at}] ${m.body}`;
+          ul.appendChild(li);
+        });
+      }
+    } catch (e) {
+      console.warn('stats error', e);
+    }
+  }
+  refreshStats();
+  setInterval(refreshStats, 12000);
+})();
+</script>
+</body>
+</html>

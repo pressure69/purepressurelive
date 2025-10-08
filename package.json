@@ -1,0 +1,10 @@
+{
+  "name": "purepressurelive",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "test_openai.js",
+  "dependencies": {
+    "dotenv": "^17.2.3",
+    "openai": "^6.0.0"
+  }
+}

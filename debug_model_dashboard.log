@@ -1,0 +1,1 @@
+[27-Sep-2025 23:15:28 UTC] PHP Notice:  session_start(): Ignoring session_start() because a session is already active (started from /var/www/purepressurelive/model_dashboard.php on line 9) in /var/www/purepressurelive/model_dashboard.php.bak on line 11

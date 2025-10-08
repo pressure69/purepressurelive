@@ -1,0 +1,5 @@
+[03-Oct-2025 00:00:01 UTC] PHP Fatal error:  Uncaught PDOException: SQLSTATE[42S02]: Base table or view not found: 1146 Table 'purepressurelive.transactions' doesn't exist in /var/www/html/cron_payouts.php:8
+Stack trace:
+#0 /var/www/html/cron_payouts.php(8): PDO->query()
+#1 {main}
+  thrown in /var/www/html/cron_payouts.php on line 8

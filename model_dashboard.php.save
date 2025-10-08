@@ -1,0 +1,219 @@
+<?php
+// model_dashboard.php — requires model login
+session_start();
+require_once __DIR__ . '/config.php';
+
+// Secure session cookie settings
+session_set_cookie_params([
+    'httponly' => true,
+    'secure' => isset($_SERVER['HTTPS']), // only enforce on HTTPS
+    'samesite' => 'Strict'
+]);
+
+if (!isset($_SESSION['model_id'])) {
+    header("Location: login.php");
+    exit;
+}
+
+$stmt = $pdo->prepare("SELECT id,username,preview_image,is_live,stream_key,bio,tags FROM models WHERE id=?");
+$stmt->execute([$_SESSION['model_id']]);
+$model = $stmt->fetch(PDO::FETCH_ASSOC);
+if (!$model) {
+    echo "Model not found";
+    exit;
+}
+
+// Handle preview upload
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['preview'])) {
+    $f = $_FILES['preview'];
+    if ($f['error'] === UPLOAD_ERR_OK) {
+        $ext = strtolower(pathinfo($f['name'], PATHINFO_EXTENSION));
+        $allowed_exts = ['jpg','jpeg','png','webp'];
+
+        // Verify it's actually an image
+        $imginfo = @getimagesize($f['tmp_name']);
+        if ($imginfo && in_array($ext, $allowed_exts)) {
+            $safe_ext = ($ext === 'jpeg') ? 'jpg' : $ext;
+            $name = 'preview_' . $model['id'] . '_' . time() . '.' . $safe_ext;
+            $dst = __DIR__ . '/uploads/previews/' . $name;
+
+            if (move_uploaded_file($f['tmp_name'], $dst)) {
+                $rel = 'uploads/previews/' . $name;
+                $u = $pdo->prepare("UPDATE models SET preview_image=? WHERE id=?");
+                $u->execute([$rel, $model['id']]);
+                $model['preview_image'] = $rel;
+            }
+        } else {
+            echo "Invalid file type.";    }
+}
+
+// Regenerate stream key
+if (isset($_POST['regen_key'])) {
+    $new = bin2hex(random_bytes(16));
+    $u = $pdo->prepare("UPDATE models SET stream_key=? WHERE id=?");
+    $u->execute([$new, $model['id']]);
+    $model['stream_key'] = $new;
+}
+
+$brand = "PurePressureLive";
+function e($str) { return htmlspecialchars($str, ENT_QUOTES, 'UTF-8'); }
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title><?=e($brand)?> • Model Dashboard</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0f0f12;--panel:#14141a;--ink:#fff;--muted:#9aa0a6;--accent:#d9153b;--line:#23232a}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:Poppins,Arial}
+.wrap{max-width:1200px;margin:0 auto;padding:18px}
+.header{display:flex;align-items:center;gap:12px}
+h1{font-family:Anton;margin:0;font-size:28px}
+.badge{background:var(--accent);padding:4px 10px;border-radius:999px;font-size:12px}
+.grid{display:grid;grid-template-columns:1.2fr .8fr;gap:16px;margin-top:16px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px}
+label{font-size:13px;color:var(--muted)}
+input[type=file],button{border:1px solid var(--line);background:#0d0d10;color:#fff;border-radius:10px;padding:10px 12px}
+.row{display:flex;gap:10px;align-items:center}
+.field{margin:8px 0}
+.preview{width:100%;border-radius:12px;border:1px solid var(--line);background:#0a0a0e;aspect-ratio:16/9;object-fit:cover}
+.chat{height:420px;overflow:auto;background:#0a0a0e;border:1px solid var(--line);border-radius:12px;padding:12px}
+.msg{margin:8px 0}
+.msg.you{color:#eaeaea}
+.msg.ai{color:#cfe4ff}
+.inputbar{display:flex;gap:8px;margin-top:10px}
+textarea{flex:1;border:1px solid var(--line);background:#0d0d10;color:#fff;border-radius:10px;padding:10px;height:64px}
+.kv{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.stat{background:#0b0b0e;border:1px solid var(--line);border-radius:12px;padding:12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="header">
+    <h1><?=e($brand)?><span class="badge">Model Dashboard</span></h1>
+    <div style="margin-left:auto;color:#9aa0a6">Welcome, @<?=e($model['username'])?></div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h3>Streaming</h3>
+      <div class="kv">
+        <div class="stat">
+          <div><b>Status:</b> <?=$model['is_live']? '🟢 Live':'⚪ Offline'?></div>
+          <div class="field"><small>Use OBS → RTMP → paste stream key</small></div>
+          <form method="post"><button name="regen_key">🔐 Regenerate Stream Key</button></form>
+          <div class="field"><label>Stream Key</label>
+            <div style="user-select:all;word-break:break-all;background:#09090c;border:1px solid #222;border-radius:10px;padding:10px">
+              <?=e($model['stream_key'] ?: '—')?>
+            </div>
+          </div>
+        </div>
+        <div class="stat">
+          <div class="field"><label>Upload Preview (shown in feed)</label></div>
+          <form method="post" enctype="multipart/form-data" class="row">
+            <input type="file" name="preview" accept="image/*">
+            <button>Upload</button>
+          </form>
+          <div class="field">
+            <img class="preview" src="<?=e($model['preview_image'] ?: 'assets/img/preview-fallback.jpg')?>" alt="preview">
+          </div>
+        </div>
+      </div>
+
+      <hr style="border:0;border-top:1px solid var(--line);margin:16px 0">
+      <h3>Go Live (Webcam with Filters)</h3>
+      <div class="row">
+        <button id="startCam">Start Camera</button>
+        <label class="row"><input type="checkbox" id="beauty"> Beauty Smooth</label>
+        <label class="row"><input type="checkbox" id="mesh"> Face Mesh</label>
+      </div>
+      <div class="row" style="margin-top:10px;gap:16px">
+        <video id="cam" playsinline autoplay muted style="width:60%;border:1px solid var(--line);border-radius:12px;background:#000"></video>
+        <canvas id="canvas" style="width:40%;border:1px solid var(--line);border-radius:12px;background:#000;aspect-ratio:16/9"></canvas>
+      </div>
+      <div style="color:#9aa0a6;margin-top:8px">Tip: Use OBS for production streaming. The in-browser preview shows filters in real time.</div>
+    </div>
+
+    <div class="card">
+      <h3>James • Model AI Assistant</h3>
+      <div id="chat" class="chat"></div>
+      <div class="inputbar">
+        <textarea id="prompt" placeholder="Ask James about tips, goals, private shows, OBS, filters…"></textarea>
+        <button id="send">Send</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MediaPipe from CDN -->
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
+<script>
+const chat = document.getElementById('chat');
+const promptEl = document.getElementById('prompt');
+const sendBtn = document.getElementById('send');
+function addMsg(text, who='you'){
+  const div=document.createElement('div'); div.className='msg '+who; div.textContent=text; chat.appendChild(div); chat.scrollTop=chat.scrollHeight;
+}
+sendBtn.onclick = async ()=>{
+  const text = promptEl.value.trim(); if(!text) return;
+  addMsg(text,'you'); promptEl.value='';
+  try{
+    const r = await fetch('api/ai_proxy.php',{method:'POST',headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({purpose:'model_help',messages:[{role:'user',content:text}]})
+    }).then(r=>r.json());
+    addMsg(r.text || r.message || 'AI offline (fallback).','ai');
+  }catch(e){ addMsg('AI error.','ai'); }
+};
+
+// Camera + filters
+const cam = document.getElementById('cam');
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const beauty = document.getElementById('beauty');
+const meshToggle = document.getElementById('mesh');
+let stream=null, camUtils=null, faceMesh=null;
+
+document.getElementById('startCam').onclick = async ()=>{
+  stream = await navigator.mediaDevices.getUserMedia({video:{width:1280,height:720},audio:false});
+  cam.srcObject = stream;
+  canvas.width = 1280; canvas.height = 720;
+
+  faceMesh = new FaceMesh.FaceMesh({
+    locateFile: (file)=>`https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
+  });
+  faceMesh.setOptions({maxNumFaces:1,refineLandmarks:true,minDetectionConfidence:0.6,minTrackingConfidence:0.6});
+  faceMesh.onResults(onResults);
+
+  camUtils = new CameraUtils.Camera(cam,{ onFrame: async ()=>{ await faceMesh.send({image: cam}); }, width:1280, height:720 });
+  camUtils.start();
+};
+
+function onResults(results){
+  ctx.drawImage(results.image,0,0,canvas.width,canvas.height);
+
+  if(beauty.checked){
+    try{
+      const temp = document.createElement('canvas'); temp.width=canvas.width; temp.height=canvas.height;
+      const tctx = temp.getContext('2d');
+      tctx.filter = 'blur(4px)'; tctx.drawImage(canvas,0,0); tctx.filter='none';
+      ctx.globalAlpha = 0.35; ctx.drawImage(temp,0,0); ctx.globalAlpha = 1.0;
+    }catch(e){}
+  }
+
+  if(meshToggle.checked && results.multiFaceLandmarks && results.multiFaceLandmarks.length){
+    const lm = results.multiFaceLandmarks[0];
+    ctx.strokeStyle = '#d9153b'; ctx.lineWidth=2;
+    for(let i=0;i<lm.length;i+=5){
+      const p = lm[i];
+      ctx.beginPath();
+      ctx.arc(p.x*canvas.width, p.y*canvas.height, 1.6, 0, Math.PI*2);
+      ctx.stroke();
+    }
+  }
+}
+</script>
+</body>
+</html>
