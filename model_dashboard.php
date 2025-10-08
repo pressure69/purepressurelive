@@ -4,21 +4,29 @@ require_once __DIR__ . '/config.php';
 
 // Verify model is logged in
 if (!isset($_SESSION['model_id'])) {
-    header("Location: login.php");
+    header('Location: /login.php');
     exit;
 }
 
 $model_id = $_SESSION['model_id'];
 
 // Fetch model info
-$stmt = $pdo->prepare("SELECT username, preview_image, is_live, stream_key, token_goal FROM models WHERE id = ?");
-$stmt->execute([$model_id]);
-$model = $stmt->fetch(PDO::FETCH_ASSOC);
+try {
+    $stmt = $pdo->prepare("SELECT username, display_name, preview_image, is_live, stream_key, token_goal FROM models WHERE id = ?");
+    $stmt->execute([$model_id]);
+    $model = $stmt->fetch(PDO::FETCH_ASSOC);
+} catch (PDOException $e) {
+    error_log('Failed to load model dashboard: ' . $e->getMessage());
+    $model = false;
+}
 
 if (!$model) {
     echo "Model not found.";
     exit;
 }
+
+$displayName = $model['display_name'] ?? $model['username'] ?? 'Model';
+$tokenGoal = isset($model['token_goal']) ? (int) $model['token_goal'] : 0;
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -57,7 +65,7 @@ if (!$model) {
 </head>
 <body>
   <div class="container">
-    <h1>Welcome, <?php echo htmlspecialchars($model['username']); ?></h1>
+    <h1>Welcome, <?php echo htmlspecialchars($displayName); ?></h1>
 
     <div class="section">
       <h2>Stream Key</h2>
@@ -67,7 +75,7 @@ if (!$model) {
     <div class="section">
       <h2>Token Goal</h2>
       <div class="goal-bar"><div class="goal-fill" id="goalFill"></div></div>
-      <p id="goalText">0 / <?php echo (int)$model['token_goal']; ?> tokens</p>
+      <p id="goalText">0 / <?php echo $tokenGoal; ?> tokens</p>
     </div>
 
     <div class="section">
