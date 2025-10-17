@@ -1,0 +1,16 @@
+{
+    "name": "purepressurelive/webapp",
+    "description": "PurePressureLive streaming platform",
+    "type": "project",
+    "require": {
+        "php": ">=7.4"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^9.5"
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Tests\\": "tests/"
+        }
+    }
+}
