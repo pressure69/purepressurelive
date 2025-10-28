@@ -1,0 +1,91 @@
+<?php
+
+declare(strict_types=1);
+
+require_once __DIR__ . '/config.php';
+
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+
+try {
+    $stmt = $pdo->query('
+        SELECT id, username, display_name, is_live, preview_image
+        FROM models
+        ORDER BY is_live DESC, id DESC
+    ');
+    $models = $stmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (Throwable $e) {
+    die('<pre style="color:red;background:black;">DB ERROR: ' . htmlspecialchars($e->getMessage()) . '</pre>');
+}
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PurePressureLive Feed</title>
+<style>
+body {
+    background:#000;
+    color:#fff;
+    font-family:Arial, sans-serif;
+    margin:0;
+    padding:30px;
+}
+h1 {
+    text-align:center;
+    color:#ff0044;
+    margin-bottom:30px;
+}
+.grid {
+    display:flex;
+    flex-wrap:wrap;
+    gap:20px;
+    justify-content:center;
+}
+.card {
+    width:260px;
+    background:#111;
+    border-radius:10px;
+    box-shadow:0 0 10px rgba(255,0,0,0.4);
+    overflow:hidden;
+    text-align:center;
+    transition:transform .2s;
+}
+.card:hover { transform:scale(1.05); }
+.card img {
+    width:100%;
+    height:200px;
+    object-fit:cover;
+}
+.name { font-weight:bold; margin:10px 0; }
+.status { font-weight:bold; }
+.online { color:#0f0; }
+.offline { color:#888; }
+</style>
+</head>
+<body>
+<h1>🔥 PurePressureLive Feed 🔥</h1>
+
+<?php
+if (empty($models)) {
+    echo "<p style='text-align:center;color:red;'>No models found in database.</p>";
+} else {
+    echo "<div class='grid'>";
+    foreach ($models as $m) {
+        $name = htmlspecialchars($m['display_name'] ?: $m['username']);
+        $img  = htmlspecialchars($m['preview_image'] ?: '/images/default_preview.jpg');
+        $statusClass = $m['is_live'] ? 'online' : 'offline';
+        $statusText  = $m['is_live'] ? 'LIVE NOW 🔴' : 'Offline';
+        echo "
+        <div class='card'>
+            <img src='{$img}' alt='{$name}'>
+            <div class='name'>{$name}</div>
+            <div class='status {$statusClass}'>{$statusText}</div>
+        </div>";
+    }
+    echo '</div>';
+}
+?>
+</body>
+</html>

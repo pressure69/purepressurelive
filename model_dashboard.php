@@ -1,0 +1,175 @@
+<?php
+
+declare(strict_types=1);
+
+session_start();
+require_once __DIR__ . '/config.php';
+
+if (empty($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'model') {
+    header('Location: /login.php');
+    exit;
+}
+
+$modelId = (int) $_SESSION['user_id'];
+try {
+    $stmt = $pdo->prepare('SELECT username, display_name, preview_image, is_live, stream_key, token_goal FROM models WHERE id = :id');
+    $stmt->execute(['id' => $modelId]);
+    $model = $stmt->fetch(PDO::FETCH_ASSOC);
+} catch (Throwable $e) {
+    error_log('Dashboard load failed: ' . $e->getMessage());
+    die('Error loading dashboard.');
+}
+
+$display = $model['display_name'] ?: $model['username'];
+$goal = (int)($model['token_goal'] ?? 0);
+$progress = min(100, rand(0, 90));
+$remaining = max(0, $goal - round(($goal * $progress) / 100));
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title><?= htmlspecialchars($display) ?> | Model Dashboard</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+body {
+    background: radial-gradient(circle at 50% 50%, #1a0000, #000 90%);
+    color: #fff;
+    font-family: 'Arial Black', sans-serif;
+    margin: 0; padding: 0;
+}
+.header { text-align: center; padding: 1em 0; font-size: 1.5em; color: #ff0033; letter-spacing: 1px; }
+.dashboard { display: flex; flex-direction: column; align-items: center; }
+.video-wrapper {
+    width: 90%; max-width: 640px; aspect-ratio: 16/9;
+    border: 3px solid crimson; border-radius: 8px; overflow: hidden;
+    box-shadow: 0 0 30px 4px crimson; background:#000;
+}
+video { width: 100%; height: 100%; object-fit: cover; transition: all 0.3s ease; }
+.controls { margin-top: 1em; display: flex; gap: 10px; flex-wrap: wrap; justify-content:center; }
+button {
+    padding: 10px 16px; background: crimson; border: none;
+    border-radius: 5px; font-weight: bold; color: #fff; cursor: pointer;
+}
+button:hover { background: #ff0033; }
+.filter-select {
+    margin-top: 1em; background: #220000; color: #fff;
+    padding: 8px; border-radius: 4px; border: 1px solid crimson;
+}
+.progress-bar { margin-top: 1em; width: 90%; background: #300; border-radius: 10px; overflow: hidden; }
+.progress-fill { height: 14px; width: <?= $progress ?>%; background: linear-gradient(90deg, #ff0033, #ff8080); }
+.info {
+    margin-top: 1.5em; background: rgba(40, 0, 0, 0.7); padding: 1em;
+    border-radius: 8px; text-align: center; width: 320px;
+}
+</style>
+</head>
+<body>
+<div class="header">Welcome, <?= htmlspecialchars($display) ?> ❤️</div>
+<div class="dashboard">
+    <div class="video-wrapper">
+        <video id="cam" autoplay playsinline></video>
+    </div>
+    <select id="filterSelect" class="filter-select">
+        <option value="">No Filter</option>
+        <option value="contrast(1.2) brightness(1.1)">Beauty Smooth</option>
+        <option value="sepia(0.5) brightness(1.1)">Warm Glow</option>
+        <option value="contrast(1.4) saturate(1.3)">Bronze</option>
+        <option value="contrast(1.3) saturate(1.5)">Golden Hour</option>
+        <option value="grayscale(0.3) brightness(1.2)">Angel</option>
+        <option value="contrast(1.6) hue-rotate(330deg)">Devil</option>
+        <option value="contrast(0.8) brightness(0.9) saturate(1.3)">Moody</option>
+        <option value="contrast(1.1) hue-rotate(45deg)">Sunset</option>
+        <option value="contrast(1.4) hue-rotate(180deg)">Neon</option>
+        <option value="grayscale(1)">Noir</option>
+        <option value="blur(2px)">Dreamy Blur</option>
+        <option value="invert(0.8)">Chroma</option>
+        <option value="contrast(1.6) saturate(2)">Disco Pop</option>
+        <option value="contrast(1.2) sepia(1)">Retro VHS</option>
+        <option value="brightness(1.3) hue-rotate(260deg)">Infrared</option>
+        <option value="saturate(0.5) brightness(1.3)">Pastel Glow</option>
+        <option value="contrast(0.9) brightness(1.4)">Soft Light</option>
+        <option value="contrast(1.2) brightness(0.8)">Cold Light</option>
+        <option value="contrast(1.5) hue-rotate(90deg)">Dream Filter</option>
+        <option value="contrast(1.3) saturate(1.6)">Sparkle</option>
+        <option value="contrast(1.4) sepia(0.2)">Hearts</option>
+        <option value="contrast(1.2) hue-rotate(270deg)">Bokeh</option>
+        <option value="contrast(1.6) brightness(1.3)">Spotlight</option>
+        <option value="contrast(1.5) brightness(1.2)">Pop Art</option>
+        <option value="contrast(1.2) blur(1px)">Glam</option>
+        <option value="contrast(1.4) brightness(1.4)">Spark Light</option>
+        <option value="contrast(1.1) sepia(0.3)">Vintage</option>
+        <option value="contrast(1.3) hue-rotate(150deg)">Ocean</option>
+        <option value="contrast(1.7) hue-rotate(90deg)">Tropical</option>
+        <option value="contrast(1.2) blur(0.5px)">Soft Focus</option>
+        <option value="contrast(1.6) saturate(1.8)">Fiesta</option>
+        <option value="contrast(1.5) brightness(1.5)">Starburst</option>
+    </select>
+
+    <div class="controls">
+        <button id="goLive">Go Live</button>
+        <button id="pauseLive">Pause</button>
+        <button id="stopLive">Stop</button>
+        <button id="zoomIn">Zoom In</button>
+        <button id="zoomOut">Zoom Out</button>
+    </div>
+
+    <div class="info">
+        <p><strong>Stream Key:</strong> <?= substr($model['stream_key'], 0, 4) ?>••••••••</p>
+        <div class="progress-bar"><div class="progress-fill"></div></div>
+        <p><?= $progress ?>% of goal reached — <?= $remaining ?> tokens to go!</p>
+    </div>
+</div>
+
+<script>
+let recorder, stream, isPaused = false;
+const video = document.getElementById('cam');
+const filterSelect = document.getElementById('filterSelect');
+let currentZoom = 1;
+
+// Initialize webcam
+navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+.then(s => { stream = s; video.srcObject = s; })
+.catch(err => console.error('Camera error:', err));
+
+// Filter + zoom
+filterSelect.addEventListener('change', () => video.style.filter = filterSelect.value);
+document.getElementById('zoomIn').addEventListener('click', () => {
+    currentZoom = Math.min(2, currentZoom + 0.1);
+    video.style.transform = `scale(${currentZoom})`;
+});
+document.getElementById('zoomOut').addEventListener('click', () => {
+    currentZoom = Math.max(1, currentZoom - 0.1);
+    video.style.transform = `scale(${currentZoom})`;
+});
+
+// Go Live streaming logic
+document.getElementById('goLive').addEventListener('click', async () => {
+    if (!stream) {
+        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        video.srcObject = stream;
+    }
+    recorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp9' });
+    recorder.ondataavailable = e => {
+        if (e.data.size > 0 && !isPaused) {
+            fetch('/upload_stream.php', { method: 'POST', body: e.data });
+        }
+    };
+    recorder.start(1000);
+    alert('🔴 You are LIVE and streaming!');
+});
+
+document.getElementById('pauseLive').addEventListener('click', () => {
+    isPaused = !isPaused;
+    alert(isPaused ? '⏸️ Stream paused.' : '▶️ Stream resumed.');
+});
+
+document.getElementById('stopLive').addEventListener('click', () => {
+    if (recorder && recorder.state !== 'inactive') {
+        recorder.stop();
+        alert('⏹️ Stream stopped.');
+    }
+});
+</script>
+</body>
+</html>

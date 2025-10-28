@@ -1,0 +1,80 @@
+<?php
+// Model Stream Page - PurePressureLive
+// Displays live HLS/WebRTC video stream, tipping, and live chat for fans.
+
+session_start();
+require 'config.php';
+if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'fan') {
+    header('Location: login.php');
+    exit;
+}
+$model_id = (int)($_GET['id'] ?? 0);
+$model = $pdo->prepare('SELECT username, display_name, stream_url, token_goal FROM models WHERE id=? LIMIT 1');
+$model->execute([$model_id]);
+$data = $model->fetch();
+if (!$data) {
+    echo '<p style="color:red;">Model not found or not streaming.</p>';
+    exit;
+}
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title><?=$data['display_name'] ?: $data['username']?> - Live Stream</title>
+<link rel="stylesheet" href="style.css">
+<style>
+body{background:#000;color:#fff;font-family:Arial;text-align:center;}
+video{width:80%;border:2px solid #900;border-radius:10px;margin-top:20px;}
+.chat-box{height:300px;overflow-y:auto;border:1px solid #900;padding:10px;margin:10px auto;width:60%;background:#111;}
+#tip-form input{padding:8px;margin:5px;width:100px;}
+button{background:#900;color:#fff;padding:8px 12px;border:none;border-radius:5px;cursor:pointer;}
+button:hover{background:#b00;}
+</style>
+</head>
+<body>
+<h2>Watching <?=$data['display_name'] ?: $data['username']?> 💋</h2>
+<video id="liveVideo" controls autoplay muted></video>
+<script>
+const video=document.getElementById('liveVideo');
+video.src='<?=$data['stream_url']?>';
+video.play();
+</script>
+
+<h3>Token Goal: <?=$data['token_goal']?> 🎯</h3>
+<form id="tip-form" method="POST">
+  <input type="number" name="amount" min="1" placeholder="Tokens" required>
+  <input type="text" name="message" placeholder="Message">
+  <button type="submit">💰 Send Tip</button>
+</form>
+<?php
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['amount'])) {
+    $pdo->prepare('INSERT INTO tips(fan_id,model_id,amount,message,created_at) VALUES (?,?,?,?,NOW())')
+        ->execute([$_SESSION['user_id'],$model_id,(int)$_POST['amount'],$_POST['message'] ?? '']);
+    echo '<p style="color:#0f0;">Tip sent successfully!</p>';
+}
+?>
+
+<div class="chat-box" id="chat"></div>
+<form id="chatForm">
+  <input type="text" id="msg" placeholder="Say something..." required>
+  <button type="submit">Send</button>
+</form>
+<script>
+const chat=document.getElementById('chat');
+const form=document.getElementById('chatForm');
+form.addEventListener('submit',e=>{
+  e.preventDefault();
+  const msg=document.getElementById('msg').value.trim();
+  if(!msg)return;
+  const div=document.createElement('div');
+  div.textContent='<?=$_SESSION['username']?>: '+msg;
+  chat.appendChild(div);
+  chat.scrollTop=chat.scrollHeight;
+  form.reset();
+});
+</script>
+
+</body>
+</html>
