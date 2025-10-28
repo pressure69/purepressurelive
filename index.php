@@ -1,7 +1,5 @@
 <?php
-
 declare(strict_types=1);
-
 session_start();
 ?>
 <!doctype html><html lang="en"><head>
@@ -33,11 +31,9 @@ session_start();
       <li>PHP: <strong><?= htmlspecialchars(PHP_VERSION) ?></strong></li>
       <li>Doc root: <code><?= htmlspecialchars($_SERVER['DOCUMENT_ROOT'] ?? '') ?></code></li>
       <li>ai_test.php:
-        <?php if (is_file(__DIR__ . '/ai_test.php')) : ?>
+        <?php if (is_file(__DIR__.'/ai_test.php')): ?>
           <strong>found</strong> — <a href="/ai_test.php?prompt=hello">open</a>
-        <?php else :
-            ?><strong>missing</strong><?php
-        endif; ?>
+        <?php else: ?><strong>missing</strong><?php endif; ?>
       </li>
     </ul>
   </section>
