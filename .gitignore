@@ -1,1 +1,16 @@
+# deps / builds
+/vendor/
+/node_modules/
+/dist/
+/build/
+
+# caches & editor junk
+/.php-cs-fixer.cache
+/.idea/
+/.vscode/
+/*.log
+
+# env & local overrides (keep real secrets out of git!)
 .env
+.env.*.local
+config.local.php
