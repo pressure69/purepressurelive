@@ -1,11 +1,8 @@
 <?php
 
-declare(strict_types=1);
-
 require_once __DIR__ . '/bootstrap/db.php';
 /** @var \PDO $pdo */
 $pdo = db();
-
 declare(strict_types=1);
 
 session_start();

@@ -1,0 +1,280 @@
+<?php
+/**
+ * Front controller (HTML/PHP boundaries repaired)
+ * @phpcs:disable PSR1.Classes.ClassDeclaration.MissingNamespace
+ */
+
+declare(strict_types=1);
+/**
+ * Front controller
+ * @phpcs:disable PSR1.Classes.ClassDeclaration.MissingNamespace
+ */
+declare(strict_types=1);
+require __DIR__ . '/vendor/autoload.php';
+
+use PurePressureLive\Front\BootstrapDbTest;
+declare(strict_types=1);
+# /var/www/purepressurelive/bootstrap/db.php
+<?php
+
+declare(strict_types=1);
+
+use PDO;
+use PDOException;
+
+/**
+ * Shared PDO instance (memoized).
+ * Env:
+ *  - DB_DSN (e.g., mysql:host=127.0.0.1;dbname=app;charset=utf8mb4 or sqlite::memory:)
+ *  - DB_HOST, DB_NAME, DB_USER, DB_PASS (used if DB_DSN missing)
+ */
+function db(): PDO
+{
+    static $pdo = null;
+    if ($pdo instanceof PDO) {
+        return $pdo;
+    }
+
+    $dsn = getenv('DB_DSN') ?: sprintf(
+        'mysql:host=%s;dbname=%s;charset=utf8mb4',
+        getenv('DB_HOST') ?: 'localhost',
+        getenv('DB_NAME') ?: 'purepressurelive'
+    );
+    $user = getenv('DB_USER') ?: 'root';
+    $pass = getenv('DB_PASS') ?: '';
+
+    $options = [
+        PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
+        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+        PDO::ATTR_EMULATE_PREPARES   => false,
+    ];
+
+    try {
+        $pdo = new PDO($dsn, $user, $pass, $options);
+    } catch (PDOException $e) {
+        if (\PHP_SAPI === 'cli') {
+            // Important: clearer failure for CI/CLI.
+            fwrite(STDERR, 'DB connection failed: ' . $e->getMessage() . PHP_EOL);
+        }
+        throw $e;
+    }
+
+    return $pdo;
+}
+
+# ------------------------------------------------------------
+# /var/www/purepressurelive/phpstan.bootstrap.php
+<  ? php
+declare(strict_types=1);
+
+require __DIR__ . '/bootstrap/db.php';
+
+# ------------------------------------------------------------
+# /var/www/purepressurelive/tools/codemod/localize-pdo.php
+<  ? php
+/**
+ * Usage:
+ *   php tools/codemod/localize-pdo.php [files...]
+ * If no files passed, scans these defaults:
+ *   feed.php model_dashboard.php model_stream.php upload_stream.php
+ *
+ * What it does:
+ *  - Ensures require bootstrap/db.php and "use PDO;"
+ *  - Removes "global $pdo;"
+ *  - Inserts local "$pdo = db();" at function scope when $pdo is used & not parameterized/assigned
+ *  - Inserts one top-level "$pdo = db();" if $pdo used at file scope
+ *  - Writes .bak backups
+ */
+declare(strict_types=1);
+
+$root = realpath(__DIR__ . '/../../') ?: getcwd();
+chdir($root);
+
+$targets = $argv;
+array_shift($targets);
+if (!$targets) {
+    $targets = ['feed.php', 'model_dashboard.php', 'model_stream.php', 'upload_stream.php'];
+}
+$targets = array_values(array_filter(array_map('strval', $targets)));
+
+foreach ($targets as $file) {
+    if (!is_file($file)) {
+        fwrite(STDERR, "[skip] $file (not found)\n");
+        continue;
+    }
+    $code = file_get_contents($file);
+    if ($code === false) {
+        fwrite(STDERR, "[skip] $file (unreadable)\n");
+        continue;
+    }
+
+    $orig = $code;
+
+    // Normalize opening tag and declare(strict_types=1);
+    if (!str_starts_with($code, "<?php")) {
+        $code = "<?php\n" . $code;
+    }
+    if (!preg_match('/declare\s*\(\s*strict_types\s*:\s*1\s*\)\s*;/', $code)) {
+        $code = preg_replace('/^\s*<\?php\s*/', "<?php\ndeclare(strict_types=1);\n", $code, 1);
+    }
+
+    // Ensure bootstrap include (path relative from project root files)
+    $bootstrapLine = "require __DIR__ . '/bootstrap/db.php';";
+    if (!str_contains($code, $bootstrapLine)) {
+        // Place after opening tag / declare
+        $code = preg_replace(
+            '/(<\?php\s*declare\s*\(\s*strict_types\s*:\s*1\s*\)\s*;\s*)/i',
+            "$1$bootstrapLine\n",
+            $code,
+            1
+        );
+    }
+
+    // Ensure "use PDO;"
+    if (!preg_match('/^\s*use\s+PDO\s*;\s*$/m', $code)) {
+        // Put after require line
+        $code = preg_replace(
+            '/' . preg_quote($bootstrapLine, '/') . '\s*/',
+            $bootstrapLine . "\nuse PDO;\n",
+            $code,
+            1
+        );
+    }
+
+    // Remove "global $pdo;"
+    $code = preg_replace('/^\s*global\s+\$pdo\s*;\s*$/mi', '', $code);
+
+    // Token-based function processing to inject local $pdo
+    $tokens = token_get_all($code);
+    $result = '';
+    $i = 0;
+    $len = count($tokens);
+
+    // Track positions for later insertion
+    $inFunc = false;
+    $braceDepth = 0;
+    $funcParamHasPdo = false;
+    $funcBodyStartPos = null;
+    $collector = '';
+
+    // To map offsets we rebuild while scanning
+    $pieces = [];
+    for ($i = 0; $i < $len; $i++) {
+        $t = $tokens[$i];
+        $text = is_array($t) ? $t[1] : $t;
+        $pieces[] = $text;
+    }
+    $joined = implode('', $pieces);
+
+    // Find all function bodies with a lightweight parser
+    $pattern = '/function\s+([a-zA-Z_\x80-\xff][a-zA-Z0-9_\x80-\xff]*)\s*\(([^)]*)\)\s*\{/m';
+    $offset = 0;
+    $injectedCount = 0;
+    while (preg_match($pattern, $joined, $m, PREG_OFFSET_CAPTURE, $offset)) {
+        $funcName = $m[1][0];
+        $paramsStr = $m[2][0];
+        $openBracePos = $m[0][1] + strlen($m[0][0]) - 1; // position of "{"
+        // Find matching closing brace
+        $depth = 1;
+        $pos = $openBracePos + 1;
+        $lenJ = strlen($joined);
+        while ($pos < $lenJ && $depth > 0) {
+            $ch = $joined[$pos];
+            if ($ch === '{') {
+                $depth++;
+            }
+            if ($ch === '}') {
+                $depth--;
+            }
+            $pos++;
+        }
+        $bodyEnd = $pos; // position after matching "}"
+        $bodyStart = $openBracePos + 1;
+
+        $funcBody = substr($joined, $bodyStart, $bodyEnd - $bodyStart - 1);
+
+        $paramHasPdo = (bool)preg_match('/(?<![a-zA-Z0-9_])\$pdo(?![a-zA-Z0-9_])/m', $paramsStr);
+        $bodyAssignsPdo = (bool)preg_match('/\$pdo\s*=|^\s*\/\*\* @var PDO \*\/\s*\$pdo\s*=\s*db\(\)\s*;/m', $funcBody);
+        $bodyUsesPdo   = (bool)preg_match('/(?<![a-zA-Z0-9_])\$pdo(?![a-zA-Z0-9_])/m', $funcBody);
+
+        if ($bodyUsesPdo && !$paramHasPdo && !$bodyAssignsPdo) {
+            // Insert at the first non-whitespace char inside the function body
+            if (preg_match('/\S/', $funcBody, $m2, PREG_OFFSET_CAPTURE)) {
+                $insertAt = $bodyStart + $m2[0][1];
+            } else {
+                $insertAt = $bodyStart;
+            }
+            $injection = "/** @var PDO \$pdo */ \$pdo = db();\n";
+            $joined = substr($joined, 0, $insertAt) . $injection . substr($joined, $insertAt);
+            $offset = $insertAt + strlen($injection); // continue scanning after injection
+            $injectedCount++;
+            continue; // re-scan from here, braces unchanged for this function scope count
+        } else {
+            $offset = $bodyEnd; // skip past this function
+        }
+    }
+
+    // Top-level $pdo usage: if $pdo appears outside function params/assignments and not already set
+    $hasTopLevelAssign = (bool)preg_match('/^\s*\$pdo\s*=\s*db\(\)\s*;/m', $joined);
+    $usesPdoAnywhere   = (bool)preg_match('/(?<![a-zA-Z0-9_])\$pdo(?![a-zA-Z0-9_])/m', $joined);
+    if ($usesPdoAnywhere && !$hasTopLevelAssign) {
+        // Insert after "use PDO;" line
+        $joined = preg_replace(
+            '/(^\s*use\s+PDO\s*;\s*$)/m',
+            "$1\n/** @var PDO \$pdo */ \$pdo = db();",
+            $joined,
+            1,
+            $replacements
+        );
+        if ($replacements === 0) {
+            // Fallback: after bootstrap require
+            $joined = preg_replace(
+                '/' . preg_quote($bootstrapLine, '/') . '\s*/',
+                $bootstrapLine . "\n/** @var PDO \$pdo */ \$pdo = db();\n",
+                $joined,
+                1
+            );
+        }
+    }
+
+    if ($joined !== $orig) {
+        // Backup
+        copy($file, $file . '.bak');
+        file_put_contents($file, $joined);
+        fwrite(STDOUT, "[ok]  $file updated\n");
+    } else {
+        fwrite(STDOUT, "[ok]  $file unchanged\n");
+    }
+}
+
+# ------------------------------------------------------------
+# /var/www/purepressurelive/tests/BootstrapDbTest.php
+<  ? php
+declare(strict_types=1);
+
+use PHPUnit\Framework\TestCase;
+
+require __DIR__ . '/../bootstrap/db.php';
+
+final 
+
+
+# ------------------------------------------------------------
+# /var/www/purepressurelive/phpunit.xml.dist
+<  ? xml version = "1.0" encoding = "UTF-8"?>
+<phpunit
+    bootstrap="vendor/autoload.php"
+    colors="true"
+    beStrictAboutTestsThatDoNotTestAnything="true"
+    beStrictAboutOutputDuringTests="true"
+>
+    <testsuites>
+        <testsuite name="Unit">
+            <directory>tests</directory>
+        </testsuite>
+    </testsuites>
+    <php>
+        <env name="DB_DSN" value="sqlite::memory:"/>
+    </php>
+</phpunit>
+

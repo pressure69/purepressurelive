@@ -1,0 +1,23 @@
+<?php
+/**
+ * Front controller (sanitized)
+ * @phpcs:disable PSR1.Classes.ClassDeclaration.MissingNamespace
+ */
+declare(strict_types=1);
+require __DIR__ . '/vendor/autoload.php';
+<phpunit
+    bootstrap="vendor/autoload.php"
+    colors="true"
+    beStrictAboutTestsThatDoNotTestAnything="true"
+    beStrictAboutOutputDuringTests="true"
+>
+    <testsuites>
+        <testsuite name="Unit">
+            <directory>tests</directory>
+        </testsuite>
+    </testsuites>
+    <php>
+        <env name="DB_DSN" value="sqlite::memory:"/>
+    </php>
+</phpunit>
+
