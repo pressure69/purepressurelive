@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/config.php';
 
+/** @var \PDO $pdo */
 if (empty($_SESSION['model_id'])) {
     header('Location: /login.php');
     exit;
@@ -17,8 +18,8 @@ try {
          WHERE id = :id'
     );
     $stmt->execute(['id' => $modelId]);
-    $model = $stmt->fetch(PDO::FETCH_ASSOC);
-} catch (PDOException $e) {
+    $model = $stmt->fetch(\PDO::FETCH_ASSOC);
+} catch (\PDOException $e) {
     error_log('Failed to load model dashboard: ' . $e->getMessage());
     $model = false;
 }
