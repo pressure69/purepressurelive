@@ -1,0 +1,16 @@
+name: PHP Lint & Tests
+on: [pull_request]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate PHP syntax
+        run: php -l index.php
+
+      - name: Run PHPStan
+        run: php vendor/bin/phpstan analyse --memory-limit=512M
+
+      - name: Run PHPUnit
+        run: vendor/bin/phpunit --configuration phpunit.xml.dist
