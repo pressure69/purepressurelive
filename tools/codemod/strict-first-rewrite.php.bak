@@ -1,11 +1,4 @@
-<?php
-
-/**
- * Tools codemod; excluded from PHPStan via excludePaths.
- */
-
-/* ignored by PHPStan via excludePaths */
-
+<?php /* @phpstan-ignore-file */
 declare(strict_types=1);
 
 $targets = ['feed.php','model_dashboard.php','upload_stream.php'];

@@ -1,0 +1,51 @@
+<?php /* @phpstan-ignore-file */
+declare(strict_types=1);
+
+/**
+ * Injects safe defaults for variables PHPStan says "might not be defined"
+ * into model_dashboard.php, right after "$pdo = db();" in the header,
+ * and before the first closing "?>" of that header block.
+ */
+$file = 'model_dashboard.php';
+
+$code = file_get_contents($file);
+if ($code === false) { fwrite(STDERR, "read fail: $file\n"); exit(1); }
+
+$anchor = '$pdo = db();';
+$start = strpos($code, $anchor);
+if ($start === false) { fwrite(STDERR, "anchor not found in $file\n"); exit(1); }
+$afterAnchor = $start + strlen($anchor);
+
+$close = strpos($code, '?>', $afterAnchor);
+if ($close === false) { fwrite(STDERR, "no closing tag after header in $file\n"); exit(1); }
+
+$init = <<<PHPINIT
+
+/** @var string \$display */
+\$display = \$display ?? '';
+
+/** @var int \$progress */
+\$progress = isset(\$progress) && is_numeric(\$progress) ? (int)\$progress : 0;
+
+/** @var array \$model */
+\$model = is_array(\$model ?? null) ? (\$model ?? []) : [];
+
+/** @var int \$remaining */
+\$remaining = isset(\$remaining) && is_numeric(\$remaining) ? (int)\$remaining : 0;
+
+PHPINIT;
+
+$before  = substr($code, 0, $afterAnchor);
+$between = substr($code, $afterAnchor, $close - $afterAnchor);
+$after   = substr($code, $close);
+
+if (
+    !preg_match('/\$(display|progress|model|remaining)\b/', $between)
+) {
+    $between .= $init . "\n";
+}
+
+$bak = $file . '.' . date('Ymd-His') . '.bak';
+@copy($file, $bak);
+file_put_contents($file, $before . $between . $after);
+fwrite(STDOUT, "[init] $file (backup: $bak)\n");

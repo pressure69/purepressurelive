@@ -56,7 +56,7 @@ $remaining = max(0, $goal - round(($goal * $progress) / 100));
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title><?= htmlspecialchars($display ?? '') ?> | Model Dashboard</title>
+<title><?= htmlspecialchars($display) ?> | Model Dashboard</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
 body {
@@ -92,7 +92,7 @@ button:hover { background: #ff0033; }
 </style>
 </head>
 <body>
-<div class="header">Welcome, <?= htmlspecialchars($display ?? '') ?> ❤️</div>
+<div class="header">Welcome, <?= htmlspecialchars($display) ?> ❤️</div>
 <div class="dashboard">
     <div class="video-wrapper">
         <video id="cam" autoplay playsinline></video>
@@ -142,7 +142,7 @@ button:hover { background: #ff0033; }
     </div>
 
     <div class="info">
-        <p><strong>Stream Key:</strong> <?= substr((isset($model) && is_array($model) && isset($model['stream_key'])) ? (string)$model['stream_key'] : '', 0, 4) ?>••••••••</p>
+        <p><strong>Stream Key:</strong> <?= substr($model['stream_key'], 0, 4) ?>••••••••</p>
         <div class="progress-bar"><div class="progress-fill"></div></div>
         <p><?= isset($progress) ? $progress : 0 ?>% of goal reached — <?= isset($remaining) ? $remaining : 0 ?> tokens to go!</p>
     </div>

@@ -1,10 +1,4 @@
-<?php
-
-/**
- * Tools codemod; excluded from PHPStan via excludePaths.
- */
-
-/* ignored by PHPStan via excludePaths */
+<?php /* @phpstan-ignore-file */
 /**
  * Ensures DB bootstrap and local $pdo = db(); in selected files.
  * Idempotent: removes "global $pdo;", inserts header pieces once.

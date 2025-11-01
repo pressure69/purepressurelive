@@ -8,3 +8,7 @@ parameters:
     - vendor/*
     - tests/*
 
+parameters:
+    excludePaths:
+        analyse:
+            - tools/codemod/*

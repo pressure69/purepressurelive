@@ -1,30 +1,8 @@
-<?php/* dash-var-guards */
-if (!isset($display) || !is_string($display)) { $display = ''; }
-if (!isset($progress) || !is_int($progress)) { $progress = 0; }
-if (!isset($remaining) || !is_int($remaining)) { $remaining = 0; }
-/* /dash-var-guards */
-
+<?php
 declare(strict_types=1);
-
-require __DIR__ . '/bootstrap/db.php';
+require_once __DIR__ . '/bootstrap/db.php';
+/** @var \PDO $pdo */
 $pdo = db();
-
-
-$display = $_GET['display'] ?? $_POST['display'] ?? ($display ?? '');
-/** @var string $display */
-if (!isset($model) || !is_array($model)) {
-    $model = [];
-}
-
-
-// phpstan init
-$display=$display ?? "";
-$progress=$progress ?? 0;
-$remaining=$remaining ?? 0;
-$model=$model ?? [];
-?>
-declare(strict_types=1);
-declare(strict_types=1);
 declare(strict_types=1);
 declare(strict_types=1);
 declare(strict_types=1);
@@ -56,7 +34,7 @@ $remaining = max(0, $goal - round(($goal * $progress) / 100));
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title><?= htmlspecialchars($display ?? '') ?> | Model Dashboard</title>
+<title><?= htmlspecialchars($display) ?> | Model Dashboard</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
 body {
@@ -84,7 +62,7 @@ button:hover { background: #ff0033; }
     padding: 8px; border-radius: 4px; border: 1px solid crimson;
 }
 .progress-bar { margin-top: 1em; width: 90%; background: #300; border-radius: 10px; overflow: hidden; }
-.progress-fill { height: 14px; width: <?= isset($progress) ? $progress : 0 ?>%; background: linear-gradient(90deg, #ff0033, #ff8080); }
+.progress-fill { height: 14px; width: <?= $progress ?>%; background: linear-gradient(90deg, #ff0033, #ff8080); }
 .info {
     margin-top: 1.5em; background: rgba(40, 0, 0, 0.7); padding: 1em;
     border-radius: 8px; text-align: center; width: 320px;
@@ -92,7 +70,7 @@ button:hover { background: #ff0033; }
 </style>
 </head>
 <body>
-<div class="header">Welcome, <?= htmlspecialchars($display ?? '') ?> ❤️</div>
+<div class="header">Welcome, <?= htmlspecialchars($display) ?> ❤️</div>
 <div class="dashboard">
     <div class="video-wrapper">
         <video id="cam" autoplay playsinline></video>
@@ -142,9 +120,9 @@ button:hover { background: #ff0033; }
     </div>
 
     <div class="info">
-        <p><strong>Stream Key:</strong> <?= substr((isset($model) && is_array($model) && isset($model['stream_key'])) ? (string)$model['stream_key'] : '', 0, 4) ?>••••••••</p>
+        <p><strong>Stream Key:</strong> <?= substr($model['stream_key'], 0, 4) ?>••••••••</p>
         <div class="progress-bar"><div class="progress-fill"></div></div>
-        <p><?= isset($progress) ? $progress : 0 ?>% of goal reached — <?= isset($remaining) ? $remaining : 0 ?> tokens to go!</p>
+        <p><?= $progress ?>% of goal reached — <?= $remaining ?> tokens to go!</p>
     </div>
 </div>
 

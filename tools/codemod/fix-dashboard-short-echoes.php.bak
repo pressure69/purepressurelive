@@ -1,0 +1,47 @@
+<?php
+/* @phpstan-ignore-file */
+declare(strict_types=1);
+
+/**
+ * Normalize short echoes/usages of $display/$progress/$remaining in model_dashboard.php.
+ * Rewrites:
+ *   <?= $display ?>   → <?= isset($display) ? $display : "" ?>
+ *   <?= $progress ?>  → <?= isset($progress) ? $progress : 0 ?>
+ *   <?= $remaining ?> → <?= isset($remaining) ? $remaining : 0 ?>
+ * Also wraps: echo $var;
+ */
+$F = __DIR__ . '/../../model_dashboard.php';
+if (!is_file($F)) { fwrite(STDERR, "[skip] not found: $F\n"); exit(1); }
+
+$code = file_get_contents($F);
+if ($code === false) { fwrite(STDERR, "read fail: $F\n"); exit(1); }
+$orig = $code;
+
+/* Short echo replacements */
+$short = [
+    '/<\?=\s*\$display\s*\?>/i'   => '<?= isset($display) ? $display : "" ?>',
+    '/<\?=\s*\$progress\s*\?>/i'  => '<?= isset($progress) ? $progress : 0 ?>',
+    '/<\?=\s*\$remaining\s*\?>/i' => '<?= isset($remaining) ? $remaining : 0 ?>',
+];
+foreach ($short as $rx => $rep) {
+    $code = preg_replace($rx, $rep, $code);
+}
+
+/* Simple echo statement replacements */
+$echoes = [
+    '/(?<![\w$])echo\s+\$display\s*;/i'   => 'echo (isset($display) ? $display : "");',
+    '/(?<![\w$])echo\s+\$progress\s*;/i'  => 'echo (isset($progress) ? $progress : 0);',
+    '/(?<![\w$])echo\s+\$remaining\s*;/i' => 'echo (isset($remaining) ? $remaining : 0);',
+];
+foreach ($echoes as $rx => $rep) {
+    $code = preg_replace($rx, $rep, $code);
+}
+
+if ($code !== $orig) {
+    $bak = $F . '.' . date('Ymd-His') . '.bak';
+    if (!@copy($F, $bak)) { fwrite(STDERR, "backup failed: $bak\n"); exit(1); }
+    if (file_put_contents($F, $code) === false) { fwrite(STDERR, "write failed: $F\n"); exit(1); }
+    echo "[patched] model_dashboard.php (backup: $bak)\n";
+} else {
+    echo "[noop] No changes needed in model_dashboard.php\n";
+}

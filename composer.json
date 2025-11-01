@@ -5,10 +5,10 @@
         "php": "^8.4"
     },
     "require-dev": {
-        "squizlabs/php_codesniffer": "^3.13",
-        "friendsofphp/php-cs-fixer": "^3.89",
-        "phpstan/phpstan": "^1.12",
-        "phpunit/phpunit": "^11.5"
+        "squizlabs/php_codesniffer": "^3.10",
+        "friendsofphp/php-cs-fixer": "^3.49",
+        "phpstan/phpstan": "^1.11",
+        "phpunit/phpunit": "^10.5"
     },
     "autoload": {
         "psr-4": {
@@ -21,6 +21,7 @@
         "fix": "@format",
         "lint": "php vendor/bin/php-cs-fixer fix --dry-run --diff && php vendor/bin/phpcs -q -n",
         "analyze": "php vendor/bin/phpstan analyse --memory-limit=512M",
-        "test": "php vendor/bin/phpunit --colors=never"
+        "test": "php vendor/bin/phpunit --colors=never",
+        "check": "[\n  \"php vendor/bin/phpcs -n\",\n  \"php vendor/bin/phpstan analyse --no-progress --memory-limit=512M\",\n  \"php vendor/bin/phpunit --no-progress --colors=always --do-not-cache-result\"\n]"
     }
 }
